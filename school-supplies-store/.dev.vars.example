@@ -1,0 +1,2 @@
+# Optional Cloudflare secrets for future integrations only. Do not commit .dev.vars.
+# Payment gateway is intentionally disabled until a real provider is integrated.
