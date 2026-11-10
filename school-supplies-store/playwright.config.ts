@@ -19,7 +19,7 @@ export default defineConfig({
   expect: { timeout: 30_000 },
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: process.env.BASE_URL || "http://localhost:5173",
+    baseURL: process.env.BASE_URL || "http://127.0.0.1:5173",
     browserName: "chromium",
     channel,
     headless: true,

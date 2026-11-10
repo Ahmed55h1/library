@@ -32,10 +32,13 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import { api, money, localName, description } from "./lib";
-import i18nInstance, { hasLanguagePreference } from "./i18n";
+import i18nInstance from "./i18n";
 import type { StoreData, Product, CartItem, Order, OrderItem } from "./types";
 import Admin from "./Admin";
 import Art from "./Art";
+import Account, { SessionGate } from "./Account";
+import Checkout from "./Checkout";
+import "./account.css";
 
 function useRoute() {
   const [path, setPath] = useState(location.pathname + location.search);
@@ -116,7 +119,7 @@ export default function App() {
       setData(d);
       setLoadError("");
       if (
-        !hasLanguagePreference &&
+        !localStorage.getItem("maktabati-language") &&
         !localStorage.getItem("maktabati-default-applied")
       ) {
         i18nInstance.changeLanguage(
@@ -178,7 +181,7 @@ export default function App() {
       ),
     );
   if (path.startsWith("/admin"))
-    return <Admin storeSettings={data?.settings} />;
+    return <Admin />;
   const count = cart.reduce((n, c) => n + c.quantity, 0),
     currentPath = path.split("?")[0];
   return (
@@ -224,6 +227,9 @@ export default function App() {
             ))}
           </nav>
           <div className="header-actions">
+            <Link href="/account" className="account-link">
+              {lang === "ar" ? "حسابي" : "My account"}
+            </Link>
             <button
               className="language"
               onClick={() => i18n.changeLanguage(lang === "ar" ? "en" : "ar")}
@@ -252,6 +258,11 @@ export default function App() {
           ))}
         </div>
       </header>
+      <div className="demo-label">
+        {lang === "ar"
+          ? "متجر تجريبي — منتجات وطلبات خيالية، لا دفع أو توصيل فعلي"
+          : "Demo store — fictional products and orders, no real payment or delivery"}
+      </div>
       <main id="content">
         {!data ? (
           <div className="shell loading-state">
@@ -451,6 +462,8 @@ export default function App() {
           />
         ) : currentPath === "/cart" ? (
           <Cart data={data} cart={cart} setCart={setCart} />
+        ) : currentPath === "/account" ? (
+          <Account />
         ) : currentPath === "/checkout" ? (
           <Checkout
             data={data}
@@ -459,11 +472,14 @@ export default function App() {
             refresh={reload}
           />
         ) : currentPath.startsWith("/order/") ? (
-          <OrderConfirmation
-            id={currentPath.split("/")[2]}
-            token={new URLSearchParams(path.split("?")[1]).get("token") || ""}
-            data={data}
-          />
+          <SessionGate>
+            {() => (
+              <OrderConfirmation
+                id={currentPath.split("/")[2]}
+                data={data}
+              />
+            )}
+          </SessionGate>
         ) : (
           <div className="empty">
             <h1>{t("notFound")}</h1>
@@ -1003,296 +1019,11 @@ function Cart({
   );
 }
 
-function Checkout({
-  data,
-  cart,
-  clearCart,
-  refresh,
-}: {
-  data: StoreData;
-  cart: CartItem[];
-  clearCart: () => void;
-  refresh: () => Promise<void>;
-}) {
-  const { t, i18n } = useTranslation();
-  const l = i18n.language;
-  const [form, setForm] = useState({
-      customer_name: "",
-      phone: "",
-      governorate: "",
-      area: "",
-      address: "",
-      notes: "",
-    }),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false),
-    [key] = useState(() => {
-      // This is cart request metadata, so retries after a refresh keep the same key.
-      const fingerprint = JSON.stringify(cart);
-      try {
-        const previous = JSON.parse(
-          localStorage.getItem("maktabati-cart-request") || "null",
-        );
-        if (
-          previous?.fingerprint === fingerprint &&
-          typeof previous.key === "string"
-        )
-          return previous.key as string;
-        const key = crypto.randomUUID();
-        localStorage.setItem(
-          "maktabati-cart-request",
-          JSON.stringify({ fingerprint, key }),
-        );
-        return key;
-      } catch {
-        return crypto.randomUUID();
-      }
-    });
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  function changeField(field: keyof typeof form, value: string) {
-    setForm((previous) => ({ ...previous, [field]: value }));
-    setFieldErrors((previous) => ({ ...previous, [field]: "" }));
-    setError("");
-  }
-  const rows = cart.map((c) => ({
-    item: c,
-    p: data.products.find((p) => p.id === c.product_id),
-  }));
-  const subtotal = rows.reduce(
-    (n, r) => n + (r.p?.price || 0) * r.item.quantity,
-    0,
-  );
-  const rate = data.deliveryRates.find(
-    (r) => r.governorate === form.governorate && r.enabled,
-  );
-  const total = subtotal + (rate?.fee || 0);
-  const invalid = rows.some((r) => !r.p || r.p.stock < r.item.quantity);
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (busy) return;
-    const errors: Record<string, string> = {};
-    for (const k of [
-      "customer_name",
-      "phone",
-      "governorate",
-      "area",
-      "address",
-    ] as const)
-      if (!form[k].trim()) errors[k] = "required";
-    if (form.phone && !/^[+\d\s()\-]{7,40}$/.test(form.phone))
-      errors.phone = "phoneInvalid";
-    setFieldErrors(errors);
-    if (Object.keys(errors).length) return;
-    setBusy(true);
-    setError("");
-    try {
-      const result = await api<Confirmation & { access_token: string }>(
-        "/api/orders",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            ...form,
-            idempotency_key: key,
-            items: cart,
-            payment_method: "cod",
-          }),
-        },
-      );
-      localStorage.removeItem("maktabati-cart-request");
-      clearCart();
-      await refresh();
-      go(
-        `/order/${result.order.id}?token=${encodeURIComponent(result.access_token)}`,
-      );
-    } catch (e) {
-      setError((e as Error).message);
-      await refresh();
-    } finally {
-      setBusy(false);
-    }
-  }
-  if (!cart.length) return <Cart data={data} cart={cart} setCart={() => {}} />;
-  function field(k: keyof typeof form, type = "text") {
-    return (
-      <label
-        className={k === "address" || k === "notes" ? "full-width" : ""}
-        key={k}
-      >
-        {t(k)}
-        {k === "notes" ? (
-          <textarea
-            rows={3}
-            maxLength={2000}
-            value={form[k]}
-            onChange={(e) => changeField(k, e.target.value)}
-          />
-        ) : (
-          <input
-            type={type}
-            autoComplete={
-              k === "customer_name"
-                ? "name"
-                : k === "phone"
-                  ? "tel"
-                  : k === "address"
-                    ? "street-address"
-                    : undefined
-            }
-            maxLength={k === "address" ? 1000 : k === "phone" ? 40 : 160}
-            dir={k === "phone" ? "ltr" : undefined}
-            value={form[k]}
-            onChange={(e) => changeField(k, e.target.value)}
-            aria-invalid={!!fieldErrors[k]}
-          />
-        )}{" "}
-        {fieldErrors[k] && (
-          <span className="field-error">{t(fieldErrors[k])}</span>
-        )}
-      </label>
-    );
-  }
-  return (
-    <div className="shell page checkout-page">
-      <div className="breadcrumb">
-        <Link href="/cart">{t("cart")}</Link>
-        <span>/</span>
-        {t("checkout")}
-      </div>
-      <h1>{t("checkoutTitle")}</h1>
-      <p className="page-description">{t("checkoutText")}</p>
-      <form onSubmit={submit} noValidate>
-        <div className="checkout-grid">
-          <div className="checkout-fields">
-            <section className="form-panel">
-              <h2>
-                <span>01</span>
-                {t("contactDetails")}
-              </h2>
-              <div className="form-grid">
-                {field("customer_name")}
-                {field("phone", "tel")}
-              </div>
-            </section>
-            <section className="form-panel">
-              <h2>
-                <span>02</span>
-                {t("deliveryAddress")}
-              </h2>
-              <div className="form-grid">
-                <label>
-                  {t("governorate")}
-                  <select
-                    value={form.governorate}
-                    onChange={(e) => changeField("governorate", e.target.value)}
-                    aria-invalid={!!fieldErrors.governorate}
-                  >
-                    <option value="">{t("selectGovernorate")}</option>
-                    {data.deliveryRates
-                      .filter((r) => r.enabled)
-                      .map((r) => (
-                        <option value={r.governorate} key={r.governorate}>
-                          {t(`governorates.${r.governorate}`, {
-                            defaultValue: r.governorate,
-                          })}
-                        </option>
-                      ))}
-                  </select>
-                  {fieldErrors.governorate && (
-                    <span className="field-error">{t("required")}</span>
-                  )}
-                </label>
-                {field("area")}
-                {field("address")}
-                {field("notes")}
-              </div>
-            </section>
-            <section className="form-panel">
-              <h2>
-                <span>03</span>
-                {t("payment")}
-              </h2>
-              <div className="payment-option">
-                <span className="radio-selected" />
-                <div>
-                  <strong>{t("cod")}</strong>
-                  <p>{t("codText")}</p>
-                </div>
-                <Truck size={24} />
-              </div>
-              <p className="disabled-payment">
-                <ShieldCheck size={15} />
-                {t("onlineDisabled")}
-              </p>
-            </section>
-          </div>
-          <aside className="summary-card">
-            <h2>{t("orderSummary")}</h2>
-            {rows.map(({ item, p }) => (
-              <div className="summary-item" key={item.product_id}>
-                <img src={p?.image_url || "/samples/notebook.svg"} alt="" />
-                <span>
-                  {p ? localName(p, l) : t("unavailable")}
-                  <small>
-                    × {new Intl.NumberFormat(l).format(item.quantity)}
-                  </small>
-                </span>
-                <strong>
-                  {money(
-                    (p?.price || 0) * item.quantity,
-                    data.settings.currency,
-                    l,
-                  )}
-                </strong>
-              </div>
-            ))}
-            <div>
-              <span>{t("subtotal")}</span>
-              <strong>{money(subtotal, data.settings.currency, l)}</strong>
-            </div>
-            <div>
-              <span>{t("deliveryFee")}</span>
-              <strong>
-                {rate ? money(rate.fee, data.settings.currency, l) : "—"}
-              </strong>
-            </div>
-            <div className="summary-total">
-              <span>{t("total")}</span>
-              <strong>{money(total, data.settings.currency, l)}</strong>
-            </div>
-            {error && (
-              <p className="error-box" role="alert">
-                {t(`errors.${error}`, {
-                  defaultValue: t("errors.INTERNAL_ERROR"),
-                })}
-              </p>
-            )}
-            {invalid && <p className="error-box">{t("soldOutCart")}</p>}
-            <button className="btn" type="submit" disabled={busy || invalid}>
-              {busy ? (
-                <LoaderCircle size={18} className="spin" />
-              ) : (
-                <Check size={18} />
-              )}{" "}
-              {t(busy ? "placingOrder" : "placeOrder")}
-            </button>
-            <p className="summary-note">
-              <ShieldCheck size={15} />
-              {t("codText")}
-            </p>
-          </aside>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 function OrderConfirmation({
   id,
-  token,
   data,
 }: {
   id: string;
-  token: string;
   data: StoreData;
 }) {
   const { t, i18n } = useTranslation();
@@ -1300,10 +1031,10 @@ function OrderConfirmation({
   const [result, setResult] = useState<Confirmation | null>(null),
     [error, setError] = useState("");
   useEffect(() => {
-    api<Confirmation>(`/api/orders/${id}?token=${encodeURIComponent(token)}`)
+    api<Confirmation>(`/api/orders/${id}`)
       .then(setResult)
       .catch((e) => setError(e.message));
-  }, [id, token]);
+  }, [id]);
   if (error)
     return (
       <div className="empty">

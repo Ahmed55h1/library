@@ -1,137 +1,124 @@
-# مكتبتي | Maktabati
+﻿# مكتبتي | Maktabati
 
-متجر قرطاسية وملازم مطبوعة ثنائي اللغة، مع واجهة React وواجهة API على Cloudflare Workers وقاعدة D1 وصور على R2. العربية هي اللغة الأولى؛ يمكن التبديل إلى الإنجليزية دون فقد السلة. الدفع عند الاستلام يعمل، والدفع الإلكتروني معطل إلى أن يتم اختيار بوابة حقيقية وربطها.
+Arabic-first school bookstore for fictional stationery, printed study booklets, and other school products. Switch to English to change the complete interface to LTR. Responsive customer and staff interfaces, sample SVG illustrations, whole Iraqi dinar prices, and a clearly labeled demo checkout. There are no real payments or deliveries.
 
-A bilingual stationery and printed study booklet store: React + TypeScript + Vite, Tailwind, i18next, Cloudflare Workers, D1, and R2 in one project. Arabic is the initial language. Cash on Delivery works; online payment stays disabled until a real gateway is selected and integrated.
+TypeScript on both sides: React 19 + Vite, Hono, Better Auth using its native D1 adapter (`database: env.DB`), SQL migrations, and one Cloudflare Worker serving assets and API from the same origin. Node.js 24 LTS and npm were used for validation.
 
-## التشغيل المحلي | Local setup
+## Run locally
 
-تحتاج إلى Node.js حديث يدعم Vite (الإصدار المثبت لهذا المشروع يعمل مع Node 24)، وnpm. الأوامر التالية تعمل في Git Bash على Windows من مجلد المشروع. لا تحتاج إلى حساب Cloudflare للتطوير المحلي.
+From this directory in PowerShell, Command Prompt, or a terminal:
 
-Use a current Node.js version supported by Vite (this project was developed with Node 24) and npm. Run these commands in Git Bash on Windows from this project directory. Local development needs no Cloudflare login.
-
-```bash
-cd school-supplies-store
-npm install
+```sh
+npm ci
+npm run init:local
 npm run db:migrate
-# اختياري: بيانات محلية للتجربة فقط / Optional local demonstration products
 npm run db:seed
-npm run admin:create -- --email owner@example.com
 npm run dev
 ```
 
-إذا كنت داخل مجلد `school-supplies-store` بالفعل، تجاهل أمر `cd`. يطلب أمر إنشاء المدير كلمة مرور لا تقل عن 12 حرفاً، ثم يحفظ تجزئتها فقط في D1 المحلي. لا توجد بيانات دخول افتراضية ولا صفحة عامة لإنشاء المدير. استخدم بريداً تملكه وكلمة مرور خاصة بك.
+Open **http://127.0.0.1:5173/**. Use this exact origin, including the IP address: authentication and CSRF checks intentionally reject a different origin. `init:local` creates an ignored `.dev.vars` with a random auth secret and preserves an existing file. Development binds only to loopback. Local D1 is stored in `.wrangler/state`; keep it to retain data. Run the optional seed once on a new database; it adds 12 fictional products. Do not seed a real store.
 
-Skip `cd` if already inside `school-supplies-store`. The administrator command asks for a password of at least 12 characters and stores only its hash in local D1. There is no default administrator or public account creation endpoint. Choose your own email and password.
+- `/`: storefront; `/shop`: search and category filtering; `/cart`: quantities.
+- `/account`: register, sign in, password recovery, and your own orders.
+- `/checkout`: signed-in demo delivery details, server quote, then confirmation.
+- `/admin`: admin/staff workspace; a verified factor is mandatory.
 
-إذا لم تدعم نافذة Git Bash إدخال كلمة المرور التفاعلي المخفي، استخدم الطريقة التالية. لا تُكتب كلمة المرور ضمن الأمر أو في ملف.
+Local email verification and recovery use a **local demo mailbox** shown on the account form after entering an email. Refresh messages and follow the verification or reset link. This mailbox is intentionally available only with `APP_ENV=local` on loopback. It is blocked in hosted mode. Use fictional email addresses, names, phone numbers, and addresses for local testing.
 
-If your Git Bash terminal does not expose an interactive TTY to Node, use this hidden-input alternative. The password stays out of command arguments and files:
+For Wrangler without the Vite development server, build first, stop Vite, and run:
 
-```bash
-read -rsp 'Choose an administrator password (12+ characters): ' MAKTABATI_ADMIN_PASSWORD
-echo
-export MAKTABATI_ADMIN_PASSWORD
-npm run admin:create -- --email owner@example.com --password-env MAKTABATI_ADMIN_PASSWORD
-unset MAKTABATI_ADMIN_PASSWORD
-```
-
-- المتجر | Storefront: <http://localhost:5173/>
-- الإدارة | Admin: <http://localhost:5173/admin>
-
-هذه عناوين محلية على جهازك وليست روابط عامة. المنفذ ثابت؛ إذا كان مشغولاً أوقف العملية الأخرى أو عدل إعداد التشغيل. لإيقاف الخادم اضغط `Ctrl+C`. لإعادة تشغيله استخدم `npm run dev` من مجلد المشروع. بيانات D1 وR2 المحلية محفوظة في `.wrangler/state` وتبقى بعد إعادة التشغيل؛ لا تحذف هذا المجلد إذا أردت الاحتفاظ بها.
-
-These addresses are local to your computer, not public URLs. The port is fixed; stop another process using it or update the development configuration. Stop with `Ctrl+C`; restart with `npm run dev` from this directory. Local D1 and R2 persist in `.wrangler/state` across restarts. Keep that directory to retain local business data.
-
-## الإدارة والمحتوى | Administration and content
-
-من `/admin` يمكنك تعديل اسم المتجر وشعاره ووسائل الاتصال والعملة واللغة الافتراضية، وإدارة أسعار التوصيل حسب المحافظة. يمكن إضافة الأصناف وترتيبها بالسحب أو بأزرار التحريك، وإخفاؤها ونقل منتجاتها إلى صنف آخر قبل حذفها. يمكن إضافة المنتجات وتعديل مخزونها وأسعارها وصورها وترتيبها وصنفها، مع حقول المادة والمرحلة واسم المدرس للملازم المطبوعة.
-
-At `/admin`, edit the store name, logo, contacts, currency, default language, and delivery fees by governorate. Create, hide, and reorder categories using drag and drop or movement buttons. Move products to another category before deleting their category. Manage product names, descriptions, stock, prices, images, category, and ordering. Printed booklet fields include subject, academic level, and teacher name.
-
-تُعرض المبيعات المحصّلة بعملة المتجر المحددة حالياً؛ وتحتفظ الطلبات بعملتها الأصلية.
-
-Collected sales are shown for the current configured currency; orders retain their original currency.
-
-يلزم الاسم العربي والإنجليزي للنشر. إذا لم تتوفر ترجمة وصف اختياري، يظهر الوصف باللغة المتاحة. البحث يشمل الاسمين والوصفين. تنسيق الأسعار والأرقام يتبع لغة العرض، ولا يغير السعر أو يحول العملة. تغيير عملة المتجر إعداد للمبالغ الجديدة وليس تحويلاً بسعر صرف؛ راجع أسعارك عند تغييرها. يحتفظ كل طلب بالعملة والأسعار وقت الشراء.
-
-Publication requires both Arabic and English names. Optional descriptions explicitly fall back to the available language. Search covers both languages. Display language changes number formatting, not product prices or currency. Changing store currency does not perform foreign exchange conversion; review your prices when changing it. Orders retain currency and price snapshots.
-
-تقبل الصور المرفوعة PNG وJPEG وWebP حتى 5 ميغابايت مع فحص ترويسة الملف. الصور التجريبية SVG ثابتة ضمن المشروع؛ رفع SVG من لوحة الإدارة غير مسموح.
-
-Uploads accept PNG, JPEG, and WebP up to 5 MiB with file signature checks. Bundled sample SVG illustrations are part of the project; administrator SVG uploads are rejected.
-
-## الطلبات والدفع | Orders and payment
-
-السلة محفوظة محلياً؛ المنتجات والطلبات والإعدادات في D1. تتم مراجعة الكميات والأسعار ورسوم التوصيل على الخادم. يحجز الطلب المخزون بصورة ذرية ويستخدم مفتاحاً لمنع تكرار الطلب عند إعادة الإرسال. تحفظ بيانات العميل في طلب محمي برمز وصول خاص، ويمكن للمدير عرضها بعد تسجيل الدخول. إلغاء الطلب يعيد المخزون مرة واحدة. حالات الطلب منفصلة عن حالة الدفع.
-
-The cart is stored locally; business records live in D1. The server validates quantities and calculates product and delivery totals. Atomic inventory changes prevent overselling, and an idempotency key prevents duplicate orders on resubmission. Order details require a private access token or administrator session. Cancellation restores stock once. Fulfilment and payment statuses are separate.
-
-الدفع عند الاستلام جاهز. لتفعيل الدفع الإلكتروني نحتاج اسم بوابة تدعم التاجر في العراق وعملة IQD، وحساب تاجر مقبول، ومفاتيح بيئة الاختبار، ووثائق API، وسر توقيع webhook، وروابط العودة وwebhook على عنوان HTTPS. يلزم تنفيذ موصل البوابة ثم اختبار التحقق من الدفع على الخادم وتوقيع webhook ومنع تكرار المعالجة قبل استخدام مفاتيح الإنتاج. تفاصيل التهيئة في [دليل النشر](docs/DEPLOYMENT.md).
-
-Cash on Delivery is ready. Online payment activation requires a gateway supporting an Iraqi merchant and IQD, an approved merchant account, sandbox credentials, API documentation, a webhook signing secret, and HTTPS return/webhook URLs. Its adapter must then be implemented and tested for server verification, authenticated webhooks, and duplicate transaction protection before using production credentials. See [deployment](docs/DEPLOYMENT.md).
-
-## الفحص والبناء | Validation and build
-
-```bash
-npm run typecheck
+```sh
 npm run build
+npm run dev:worker
 ```
 
-لفحص التكامل كاملاً دون إنشاء حساب اختبار يدوياً، أبقِ الخادم المحلي يعمل وشغل:
+This serves the built frontend and API on the same `127.0.0.1:5173` origin. `npm run preview` is also available via the Cloudflare Vite plugin on that origin. Stop a server with Ctrl+C. Run only one server at a time on port 5173.
 
-For the complete local integration suite without manually creating a test account, leave the development server running and run:
+## First administrator and staff
 
-```bash
-npm run test:e2e
-# لإعادة فحص المتصفح فقط / To rerun only browser checks
-npm run test:e2e -- --ui-only
+1. Register the intended owner at `/account` and verify the email using the local mailbox (or real email delivery on the hosted demo).
+2. Run `npm run admin:create -- --email verified-owner@example.test`. The normal CLI promotes an existing verified account only when **no administrator exists** and writes a bootstrap audit entry. Reruns preserve the existing administrator and password. For the private remote demo, add `--remote` only after configuring its D1 database and confirming that this is the intended database. The explicit isolated local test-account procedure is documented below.
+3. Open `/admin`, sign in, enter the password to enroll an authenticator, add the displayed secret to your authenticator app, save the recovery codes securely, and enter the current code. Enrollment alone does not grant access. Future sign-ins require an authenticator code or a one-use recovery code.
+4. Staff register and verify their own accounts first. Under **Accounts & permissions**, change the account to `STAFF` and save. Every promotion starts empty. Then select the individual permissions and save again. Admins can disable staff and return staff to customers. Public registration and profile edits cannot set roles or grants. Creation of further administrators is deliberately outside the staff interface; an operator must use controlled database maintenance and record the action.
+
+| Permission | Allowed operation |
+| --- | --- |
+| `categories.manage` | Create/edit/delete empty categories; visibility and numeric display order |
+| `products.describe` | Product names, descriptions, sample/image URL, study metadata |
+| `prices.edit` | Product price only |
+| `stock.adjust` | Inventory quantity only |
+| `orders.read` | Internal order list and delivery details |
+| `orders.update` | Valid status transitions for a specified order |
+
+Product creation/archive, product category/visibility/order, delivery zones/fees, accounts, grants, and audit review are admin-only. Staff with no permissions cannot read internal data. Order updating and order reading are separate permissions; update-only staff can use the status form with an internal order ID supplied by their administrator, or call `PATCH /api/admin/orders/:id` with a permitted `status`. Both roles require factor verification for the current session before any internal request. Authorization reads current account state and grants from D1 on every request; revocation and disablement take effect on the next request.
+
+### One-time private test administrator
+
+Use a separate local D1 state directory. This operation is deliberately unavailable through the public API and rejects `--remote`:
+
+```powershell
+node node_modules/wrangler/bin/wrangler.js d1 migrations apply school-supplies-store --local --persist-to .wrangler/private-release-v0.1.0
+npm run admin:create -- --test-setup --persist-to .wrangler/private-release-v0.1.0 --email admin@maktabati.example.test
 ```
 
-ينشئ هذا الأمر مديراً محلياً مؤقتاً بكلمة مرور عشوائية في ذاكرة العملية، ويفحص API والمتصفح ثم يحذف حساب الاختبار. لا يطبع كلمة المرور. يجب تهيئة D1 المحلي وتحميل البيانات التجريبية أولاً.
+Enter the initial password at the hidden prompt, or supply it through the server-side `MAKTABATI_TEST_ADMIN_PASSWORD` secret in an automation environment. Do not put its value in configuration, command arguments, or logs. The CLI uses Better Auth's password hashing implementation and creates the explicitly verified fictional test identity with role `ADMIN`, login `ADMIN`, and a mandatory password-change flag. The 11-character exception exists only in this offline local setup operation; registration, recovery, and new passwords still require 12+ characters. Existing accounts/passwords are preserved on reruns. Normal staff and customers continue to use verified email sign-in.
 
-This command creates a temporary local administrator with a random password held in process memory, runs API/browser checks, then removes that account. It does not print the password. Initialize local D1 and load the sample catalog first.
+At first sign-in, change the password before accessing the dashboard, then enroll/verify two-factor authentication. The server enforces both checks. Disabling an account or changing its role deletes its `session` and `mfa_sessions` rows transactionally; reactivation never restores them. Sign in again after promotion or reactivation. For a private local preview use the built Worker with `--persist-to .wrangler/private-release-v0.1.0`; do not point it at the ordinary development or remote database.
 
-لفحص API، شغل الخادم أولاً وافتح نافذة Git Bash ثانية. أنشئ مديراً محلياً للاختبار إذا لم يوجد، ثم أدخل نفس بياناته دون حفظ كلمة المرور في ملفات:
+### Private wrappers and source handoff
 
-For API integration tests, leave the server running and open another Git Bash terminal. Create a local test administrator if needed; enter its credentials without placing the password in files:
+See [packaging/README.md](packaging/README.md) for Tauri 2 Windows x64/Android builds, exact missing prerequisites, external signing, installation, and platform acceptance steps. No native installer/APK has been built or installed here. Generate the secret-free source archive with `python scripts/package-source.py`; output and SHA256 are in ignored `artifacts/`. It includes both lockfiles, placeholder `.dev.vars.example`, development scripts, tests, and all migrations. It excludes secrets, signing keys, local databases, dependencies, generated builds, Git metadata, and test/browser reports.
 
-```bash
-read -rp 'Local test administrator email: ' TEST_ADMIN_EMAIL
-read -rsp 'Local test administrator password: ' TEST_ADMIN_PASSWORD
-echo
-export TEST_ADMIN_EMAIL TEST_ADMIN_PASSWORD
+## Checkout and data integrity
+
+`POST /api/checkout/quote` accepts only product IDs, integer quantities, and a zone, and stores a 10-minute quote belonging to the authenticated account. The UI shows its server-calculated item prices, subtotal, delivery fee, and total before a separate confirmation button. `POST /api/orders` accepts only `quote_id`, `idempotency_key` (UUID), and `shipping` (name, phone, zone, area, address, optional delivery notes). It accepts no client prices, fees, totals, payment fields, or account identity.
+
+One D1 `batch` claims the quote and inserts the order, all price/name/image snapshots, inventory reservations, and audit events. SQL triggers recheck stock, product/category visibility, confirmed prices/names, delivery fees, currency, quote ownership, and expiration inside the transaction. A failing item rolls back the claim, complete order, earlier stock reservations, and audits. Identical confirmation retries return the existing order even with a different key or after quote expiration; conflicting payloads, key reuse, or another account return a conflict. Historical quote claims are backfilled without deleting previous orders. Purchase-time delivery address, fees, prices, and totals remain on the order.
+
+Product forms submit only changed fields. Stock changes additionally send `expected_stock`, the stock originally loaded by the form; the server conditionally writes against that value and returns `STOCK_CHANGED` on conflict. Description-only changes cannot overwrite stock. Admin order summaries contain only displayed fields; contact/address details are fetched on demand under `orders.read`.
+
+The database and API enforce `New → Preparing → Out for Delivery → Delivered`. `New` and `Preparing` can instead become `Canceled`. Cancellation restores inventory in the same transaction once, including concurrent repeated cancellation. Cancellation after dispatch and reopening terminal orders are rejected. Persisted status keys are `new`, `preparing`, `shipped`, `completed`, `cancelled`; displayed labels are Arabic or the requested English names.
+
+## Security and operations
+
+- Better Auth stores sessions in D1; cookie caching is disabled. Cookies are HttpOnly and SameSite=Strict, and Secure when hosted. HTTP is allowed only for loopback development.
+- Internal factor assurance is stored in `mfa_sessions` for the exact session after a successful Better Auth authenticator/recovery-code response. An enrolled flag, forged cookie, trusted-device sign-in, or client state cannot substitute for that proof. Disabling two-factor clears session proofs. Password recovery revokes existing sessions.
+- Every mutation requires the configured exact Origin, same-site Fetch Metadata when supplied, JSON content type, and a bounded request body. Zod strict schemas reject unexpected update fields, and application SQL values are parameterized. SQL column names come only from validated schemas.
+- D1-backed rate limits apply across isolates: sign-in/registration/recovery/reset routes 5 requests per 15 minutes per IP/route, all auth mutations 30/minute, factor verification 8/5 minutes, plus quote/confirmation limits. Better Auth also enforces one-use recovery codes and factor failure lockout. Avoid changing IP trust headers in a reverse proxy; hosted requests must enter through Cloudflare.
+- Price/stock edits, grants, order creation/status, stock reservations/restoration, delivery settings, and category changes write actor/timestamp audit records atomically with the action. Application routes cannot update/delete audit records; database triggers reject both. Database operators remain trusted and should export audit records outside D1 for independent retention.
+- `.dev.vars`, local runtime state, dependencies, builds, browser traces, and reports are ignored. Keep the auth secret stable: it encrypts authenticator secrets. Hosted mail uses Resend via `MAIL_API_KEY` and `MAIL_FROM`; configure a verified sender. No credentials or business data are seeded.
+- Legacy custom administrator/session tables from migration 0001 are retained for recovery compatibility but are not consulted by the new authentication implementation. Existing legacy administrators must register and verify a Better Auth account; no password/session is migrated silently.
+
+## Tests and actual results
+
+```sh
+npm run build
 npm run test:api
 npm run test:ui
-unset TEST_ADMIN_EMAIL TEST_ADMIN_PASSWORD
+# Both isolated suites after the build:
+npm run test:e2e
 ```
 
-يمكن تعيين `BASE_URL` لاختبار منفذ محلي آخر. الاختبارات مخصصة لقاعدة التطوير: تنشئ بيانات تبدأ بـ `QA`، وتفحص المصادقة والصلاحيات وترتيب الأصناف ورفع R2 والتسعير والمخزون والطلبات المتزامنة والتكرار والإلغاء. تنظف المنتجات والأصناف المؤقتة وتبقي الطلبات الملغاة كسجل فحص. لا تشغلها على قاعدة متجر حقيقي.
+`test:api` loads the **actual built Worker modules** in isolated Miniflare/workerd runtimes with disposable D1 databases. Always rebuild after application changes. `test:ui` creates a separate temporary Wrangler configuration, auth secret and D1 state, applies all migrations, seeds fictional products, and starts the built Worker on a free loopback port; it removes that state when done. It uses installed Chrome/Edge (or `npx playwright install chromium` if needed). No existing development or private test database is used. Direct Playwright fixture SQL refuses to run without the isolated runner's database/configuration. Screenshots and traces may contain test factor secrets; keep `test-results` private.
 
-Set `BASE_URL` to test another local port. The suite targets a development database: it creates records prefixed `QA` and checks authentication, authorization, category ordering, R2 uploads, server pricing, inventory, concurrent orders, retries, and cancellation. It cleans up temporary products/categories and retains cancelled test orders as an audit trail. Run it against development data.
+See [the actual validation record](docs/TESTING.md). It distinguishes completed checks from private hosted checks that require Cloudflare access. The current machine reports `You are not authenticated` from `wrangler whoami`; there is no tested hosted preview URL.
 
-فحص المتصفح يستخدم Playwright وChrome المثبت على Windows (أو Edge إذا لم يوجد Chrome). يمكن اختيار Edge بواسطة `PLAYWRIGHT_CHANNEL=msedge npm run test:ui`. إذا لم يتوفر أي منهما، ثبت Chromium بـ `npx playwright install chromium`. تحفظ صور سطح المكتب والهاتف ولقطات الفشل في `test-results/`، والتقرير في `playwright-report/`؛ هذه الملفات مستبعدة من Git. يجب تشغيل الخادم والبيانات التجريبية قبل الفحص.
+## Backup and recovery
 
-Browser tests use Playwright with installed Windows Chrome, or Edge when Chrome is unavailable. Select Edge with `PLAYWRIGHT_CHANNEL=msedge npm run test:ui`. If neither browser is installed, run `npx playwright install chromium`. Desktop/mobile screenshots and failure evidence go to `test-results/`; the HTML report goes to `playwright-report/`. These are ignored by Git. Start the server and load sample data before testing.
+Before migrations or operator account maintenance, stop local writes and export a backup outside the repository. Replace `BACKUP_PATH` with an existing protected directory outside your Git checkout:
 
-فحص المتصفح: بدّل اللغة ثم حدث الصفحة، وتحقق من `lang` و`dir` والسلة. اختبر عرض الهاتف، وصفحة الصنف والمنتج، وطلباً بالدفع عند الاستلام ثم اعرضه في لوحة الإدارة. راجع [قائمة الفحص](docs/TESTING.md).
+```sh
+npx wrangler d1 export school-supplies-store --local --output BACKUP_PATH/maktabati-backup.sql
+```
 
-Browser checks: switch languages and refresh; inspect `lang`, `dir`, and persisted cart. Check a phone viewport, category/product pages, and Cash on Delivery checkout, then find the order in admin. See the [test checklist](docs/TESTING.md).
+Copy `.dev.vars` and `.wrangler/state` to a protected backup location while the server is stopped. Preserve the auth secret separately in a secret manager. Never commit those files. To recover, create a **separate** D1 database/binding, import the export with `wrangler d1 execute <recovery-database> --local --file <backup.sql>`, validate counts, foreign keys, inventory, and order totals, then point a test Worker at it before switching the store. An export is a complete database; do not apply initial migrations over imported existing tables. An empty replacement database instead needs all migrations. Keep migration tracking consistent with the restored export. Preserve the previous state until recovery is verified.
 
-## بنية المشروع | Project structure
+For hosted D1, use `--remote` for exports and Cloudflare D1 Time Travel/bookmarks for point-in-time recovery; inspect `npx wrangler d1 time-travel --help` and the account's retention window. Restore to a verified target and reconcile any orders placed after the recovery point before reopening checkout. Do not independently restore orders and inventory: they must come from the same snapshot. Test backup restoration on a separate database before relying on it.
 
-| Path                       | Purpose / الغرض                                                           |
-| -------------------------- | ------------------------------------------------------------------------- |
-| `src/`                     | React storefront, admin, bilingual translation files / الواجهات والترجمات |
-| `worker/`                  | Workers API, authentication, validation / الخادم والمصادقة                |
-| `migrations/`              | D1 schema and initial category/settings records / قاعدة البيانات          |
-| `scripts/seed.sql`         | Optional 12 local sample products / بيانات محلية اختيارية                 |
-| `scripts/create-admin.mjs` | CLI administrator creation / إنشاء المدير                                 |
-| `tests/api.test.mjs`       | Real local D1/R2 API integration checks / فحص التكامل                     |
-| `wrangler.jsonc`           | Worker, D1, R2 bindings / موارد Cloudflare                                |
+Lost staff authenticator: use a saved one-use recovery code. If all owner factors are lost, a trusted operator must back up D1, revoke that user's sessions, remove their `twoFactor` enrollment, set `twoFactorEnabled=0`, and append an operator audit record using controlled SQL. The owner must enroll and verify a new authenticator before internal access is restored. Do not change or remove the gate, set an MFA proof manually, or make an admin through public APIs. If restoring a backup, revoke recovered sessions before opening access.
 
-## النشر لاحقاً | Deployment later
+## Private hosting and launch schedule
 
-التطبيق مجهز للنشر على Workers مع D1 وR2؛ لم يتم نشره كجزء من إعداد التطوير. اتبع [دليل النشر العربي والإنجليزي](docs/DEPLOYMENT.md) لإنشاء الموارد وإعداد المعرفات والأسرار وتطبيق migrations وإنشاء المدير في قاعدة الإنتاج. البيانات التجريبية لا تُدرج في الإنتاج تلقائياً.
+Private hosting prerequisites and commands are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Hosted mode fails closed if Access configuration or a valid signed Access JWT is missing; `run_worker_first: true` protects HTML, assets, SPA paths, and API. A browser-only login redirect is not the security boundary.
 
-The project is prepared for Workers + D1 + R2 deployment; local setup does not deploy it. Follow the [Arabic/English deployment guide](docs/DEPLOYMENT.md) to create resources, set identifiers/secrets, apply migrations, and create the production administrator. Sample data is never automatically inserted into production.
+The schedule is approval-gated: (1) complete private demo validation with fictional data; (2) after your explicit approval, select a real Iraqi payment provider, implement sandbox payments and verified/idempotent webhooks, and test them; (3) after a separate explicit public-launch approval, configure production inventory/policies, real email delivery, monitoring, backups, and launch access. No public release or live payment integration has been activated or scheduled to run automatically.

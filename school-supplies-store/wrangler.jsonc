@@ -7,7 +7,7 @@
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/images/*"],
+    "run_worker_first": true,
   },
   "d1_databases": [
     {
@@ -17,7 +17,5 @@
       "migrations_dir": "migrations",
     },
   ],
-  "r2_buckets": [
-    { "binding": "IMAGES", "bucket_name": "maktabati-product-images" },
-  ],
+  "vars": { "APP_ENV": "demo", "APP_ORIGIN": "https://configure-private-demo.invalid" },
 }

@@ -10,3 +10,14 @@ dist/
 *.log
 test-results/
 playwright-report/
+artifacts/
+packaging/src-tauri/target/
+packaging/src-tauri/gen/
+*.jks
+*.keystore
+*.pfx
+*.p12
+*.pem
+*.key
+keystore.properties
+release-config.json

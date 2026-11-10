@@ -1,2 +1,6 @@
-# Optional Cloudflare secrets for future integrations only. Do not commit .dev.vars.
-# Payment gateway is intentionally disabled until a real provider is integrated.
+﻿# Local only: generate this file with npm run init:local.
+APP_ENV="local"
+APP_ORIGIN="http://127.0.0.1:5173"
+BETTER_AUTH_SECRET="generate-a-unique-secret-of-at-least-32-characters"
+# Hosted secrets use wrangler secret put; do not place them in tracked files.
+# MAIL_API_KEY, MAIL_FROM, ACCESS_TEAM_DOMAIN, ACCESS_AUD

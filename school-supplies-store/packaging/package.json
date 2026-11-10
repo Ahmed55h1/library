@@ -1,0 +1,14 @@
+{
+  "name": "maktabati-private-wrapper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "check": "node --test tests/config.test.mjs",
+    "windows": "node release.mjs windows",
+    "android:init": "node release.mjs android-init",
+    "android": "node release.mjs android"
+  },
+  "devDependencies": { "@tauri-apps/cli": "^2.12.0" }
+}

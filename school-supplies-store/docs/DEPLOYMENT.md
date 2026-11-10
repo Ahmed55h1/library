@@ -1,93 +1,37 @@
-# النشر على Cloudflare | Cloudflare deployment
+﻿# Private Cloudflare demo deployment
 
-هذه خطوات مرحلة النشر اللاحقة. التطوير المحلي مستقل عنها. تحتاج حساب Cloudflare بصلاحيات Workers وD1 وR2، وتفعيل R2 في الحساب. لا تنشر بيانات الاختبار أو كلمات المرور أو ملفات `.dev.vars` أو `.env`.
+No private preview was deployed during this handoff. `npx wrangler whoami` reported **You are not authenticated**. Required: an authorized Cloudflare account with Workers/D1 and Zero Trust Access permissions, a selected demo hostname, an explicit approved-email/group allowlist, and a verified mail sender/API key. There is no tested preview URL, and real approved/unapproved account tests remain pending.
 
-These steps are for the later deployment stage; local development works independently. You need a Cloudflare account with permission to use Workers, D1, and R2, and an enabled R2 subscription. Keep test credentials and local secret files out of Git.
+## Configure before publishing
 
-## 1. الموارد والإعداد | Resources and configuration
+1. Sign in using `npx wrangler login` in your own interactive terminal. Run `npx wrangler whoami` and confirm the intended account.
+2. Create a dedicated fictional-data D1 database with `npx wrangler d1 create school-supplies-store`. Replace the placeholder `database_id` in `wrangler.jsonc` with the returned ID. Keep local and remote databases separate.
+3. Choose an HTTPS hostname. Configure a Cloudflare Access self-hosted application covering **every path** of that hostname, with an Allow policy limited to explicitly approved accounts/groups and the default deny policy for everyone else. Do not add a Bypass or Everyone policy. Enable Access protection on the Worker hostname as appropriate. Record the Access application AUD and your team's `https://<team>.cloudflareaccess.com` issuer.
+4. Keep `APP_ENV=demo` in Wrangler. Set `APP_ORIGIN` to the exact HTTPS origin. Add `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` as environment variables or secrets. Set `BETTER_AUTH_SECRET` using `npx wrangler secret put BETTER_AUTH_SECRET` with a fresh random secret (at least 32 characters). Set `MAIL_API_KEY` and `MAIL_FROM` with `wrangler secret put` for a verified Resend sender. Keep secrets out of Git, command arguments, README files, and deployment logs.
+5. Apply migrations using `npx wrangler d1 migrations apply school-supplies-store --remote`, including `0003_release_integrity.sql`. It preserves previous orders and permanently claims previously consumed quotes, including duplicate historical orders; it also adds session revocation and the first-password-change fields. Keep all previous migrations and the legacy `administrators`, `sessions`, and `images` tables. Seed the dedicated demo database with `npx wrangler d1 execute school-supplies-store --remote --file scripts/seed.sql` once. All data must remain fictional.
+6. Run `npm run build`, `npm run test:api`, and the documented local UI tests. Deploy with `npx wrangler deploy` from this project (the Vite build emits `.wrangler/deploy/config.json` identifying the Worker output). Preserve `run_worker_first: true`. Do not use a static Pages deployment, which would omit the application Access check.
+7. Verify the deployment URL belongs to the intended protected application. Register and verify the owner's bookstore account, then use `npm run admin:create -- --email <verified-owner> --remote`. Enroll and verify an authenticator before internal functions become available.
 
-من Git Bash داخل مجلد المشروع:
+## Verify actual Access behavior
 
-From Git Bash in the project directory:
+Use separate browser profiles for an approved account and an unapproved account, plus a signed-out profile. For the actual deployment, record timestamp, hostname, and test account identifiers privately:
 
-```bash
-npx wrangler login
-npx wrangler d1 create school-supplies-store
-npx wrangler r2 bucket create maktabati-product-images
-```
+- Approved Access account can load `/`, `/shop`, static JavaScript/images, and `/api/store`. Bookstore authentication is still required for checkout/orders. Admin/staff functions still require their current role, grant, and per-session factor proof.
+- Unapproved and signed-out accounts cannot load the frontend, assets, SPA routes, or API. Verify direct requests to `/api/store`, `/api/orders`, and `/api/admin/data`, not just navigation links. No customer information may appear in denied responses.
+- Requests that bypass the Access edge or use an alternate Worker/preview hostname must still fail inside the Worker unless they carry a valid Access JWT for the configured issuer and audience. The app verifies its signature against the team's JWKS. A made-up header, wrong issuer/audience, or expired token is rejected.
+- Inspect bookstore session cookies over HTTPS for Secure, HttpOnly, SameSite=Strict; confirm CSRF rejection and rate limits. Check the live UI in both languages on phone and desktop.
+- Copy the **tested** private HTTPS preview URL into the handoff only after these live account checks pass. Local JWT fixtures test the application's boundary but cannot establish that the real Access policy/hostname/identity provider is configured correctly.
 
-انسخ UUID الناتج عن إنشاء D1 إلى `database_id` في `wrangler.jsonc` بدلاً من المعرف المحلي الوهمي. احتفظ باسم الربط `DB`. اضبط `bucket_name` إلى اسم R2 الذي أنشأته واحتفظ بالربط `IMAGES`. يمكن اختيار أسماء موارد فريدة أخرى؛ عدل أسماء قاعدة البيانات في أوامر المشروع إذا غيرتها. `ASSETS` يقدم ملفات React المبنية، و`/api/*` يعالجها Worker أولاً.
+Hosted mode fails closed with `ACCESS_NOT_CONFIGURED`, `ACCESS_DENIED`, or `HTTPS_REQUIRED` before serving assets/API. The local demo mailbox and local HTTP behavior are unavailable when hosted. Production `.dev.vars` files are not deployment secrets; use Cloudflare environment secrets. Never deploy with `APP_ENV=local`.
 
-Replace the placeholder `database_id` in `wrangler.jsonc` with the UUID returned by D1 creation. Keep the binding named `DB`. Set R2 `bucket_name` to your actual bucket and retain the `IMAGES` binding. If you choose other resource names, also update the database names used in project commands. `ASSETS` serves the built React files; the Worker handles `/api/*` first.
+## Private Windows and Android release
 
-لا تضف `remote: true` للموارد إذا أردت استمرار التطوير باستخدام المحاكاة المحلية. الصور تُقدم من مسار API على نفس النطاق باستخدام ربط R2؛ لا تحتاج جعل الحاوية عامة أو وضع مفتاح R2 في المتصفح.
+Use the separate [Tauri 2 layer](../packaging/README.md). Supply the approved store origin and the exact Access/identity-provider origins at build time. Both frontend and API must stay at the store origin; the wrapper has no native API grants and carries no credentials. Live Access/sign-in tests and native installation are mandatory before distributing a build privately. They remain unverified until the documented environment and deployment prerequisites are available.
 
-Keep resources local during development by leaving `remote: true` unset. Images are served through the same-origin API using the R2 binding. A public bucket or browser R2 credential is unnecessary.
+## Live payment and public release
 
-راجع توثيق [أوامر D1](https://developers.cloudflare.com/d1/wrangler-commands/) و[إعداد R2](https://developers.cloudflare.com/r2/get-started/).
+Both remain awaiting the owner's explicit approval. After approval, select an Iraqi/IQD-compatible merchant provider, implement sandbox checkout and signed/replay-safe webhooks, test duplicate/delayed/failed payment events and refunds, and complete a separate production-readiness review. Request a separate public-launch approval before changing Access policies or enabling real transactions. Do not remove the Worker gate as an incidental deployment change.
 
-See the official [D1 commands](https://developers.cloudflare.com/d1/wrangler-commands/) and [R2 setup](https://developers.cloudflare.com/r2/get-started/) references.
+## Database recovery
 
-## 2. قاعدة الإنتاج والمدير | Production database and administrator
-
-```bash
-npx wrangler d1 migrations apply school-supplies-store --remote
-npm run admin:create -- --email owner@example.com --remote
-```
-
-أدخل كلمة مرور المدير عندما يطلبها الأمر. ينشئ البرنامج تجزئة PBKDF2 بملح عشوائي، ثم يكتب الحساب إلى D1 المحدد. لا توجد بيانات دخول مضمنة في الكود. لإنشاء مدير آخر كرر الأمر ببريد مختلف. عند تمرير `--remote` تحتاج صلاحيات حساب Cloudflare الصحيح.
-
-Enter the administrator password when prompted. The script generates a salted PBKDF2 hash and writes the account to the selected D1 database. Credentials are not embedded in source. Repeat with another email to create another administrator. `--remote` requires authorization for the intended Cloudflare account.
-
-تحتوي migration الأولى على الأصناف والإعدادات الأساسية فقط. لا تشغل ملف `scripts/seed.sql` على الإنتاج؛ أمر `npm run db:seed` مقيد بـ `--local`. أضف منتجات المتجر الحقيقية من لوحة الإدارة.
-
-The initial migration contains baseline categories and settings only. `npm run db:seed` explicitly targets `--local`; keep `scripts/seed.sql` out of production initialization. Add real merchandise through admin.
-
-## 3. الأسرار | Secrets
-
-لا يحتاج الدفع عند الاستلام مفتاح بوابة. تستخدم الجلسات رموزاً عشوائية تحفظ تجزئاتها في D1. أي مفاتيح خارجية مستقبلية تكون أسرار Worker، وليس متغيرات `VITE_*` أو حقول إعدادات عامة:
-
-Cash on Delivery needs no gateway key. Sessions use random tokens whose hashes are stored in D1. Future external credentials belong in Worker secrets, never `VITE_*` variables or public settings:
-
-```bash
-# عند تنفيذ موصل بوابة حقيقي فقط / Only after implementing a real gateway adapter
-npx wrangler secret put PAYMENT_API_KEY
-npx wrangler secret put PAYMENT_WEBHOOK_SECRET
-```
-
-هذه أسماء توضيحية؛ الموصل الفعلي يجب أن يحدد الأسرار المطلوبة في نوع `Env`. وضع أسرار بهذه الأسماء وحده لا يفعل الدفع. محلياً استخدم `.dev.vars` غير المضاف إلى Git؛ مثال الإعداد خالٍ من القيم السرية. في CI استخدم رمز Cloudflare محدود الصلاحيات كسر للمنصة. راجع [أسرار Workers](https://developers.cloudflare.com/workers/configuration/secrets/).
-
-These are illustrative names; the actual adapter must define its required bindings in `Env`. Merely setting them does not enable payment. For local development use an ignored `.dev.vars`, with no real values in the example file. In CI, store a scoped Cloudflare API token in the CI secret store. See [Workers secrets](https://developers.cloudflare.com/workers/configuration/secrets/).
-
-## 4. البناء والنشر | Build and publish
-
-```bash
-npm ci
-npm run typecheck
-npm run build
-npm run deploy
-```
-
-يقوم أمر `deploy` بالبناء ثم يستعمل Wrangler لنشر المخرجات التي أنشأها Cloudflare Vite Plugin. افتح عنوان `workers.dev` الحقيقي الذي يطبعه Wrangler، ثم `/admin`، وسجل الدخول بحساب الإنتاج. اضبط اسم المتجر والاتصال ورسوم التوصيل والمخزون قبل استقبال طلبات حقيقية. اختبر طلباً واحداً ثم ألغِه إذا كان اختباراً. يمكن إضافة نطاق مخصص لاحقاً من إعدادات Worker.
-
-`deploy` builds and uses Wrangler to deploy the Cloudflare Vite Plugin output. Open the actual `workers.dev` URL printed by Wrangler, then `/admin`, and sign in with the production account. Configure store identity, contacts, delivery, and stock before taking live orders. Verify checkout with one marked test order and cancel it afterward. Add a custom domain later through Worker settings.
-
-التطوير المحلي والإنتاج لهما قواعد وملفات منفصلة. لا ينقل النشر قاعدة `.wrangler/state` أو الصور المحلية إلى الإنتاج تلقائياً. ارفع الصور الفعلية من إدارة الإنتاج، واستخدم نسخ D1 الاحتياطية قبل أي migration يغير بيانات موجودة.
-
-Deployment does not transfer `.wrangler/state` or local image uploads to production. Upload production images through the production admin. Back up existing D1 data before a migration that changes stored records.
-
-## 5. المطلوب لتفعيل الدفع الإلكتروني | Online payment activation requirements
-
-الدفع الإلكتروني معطل بوضوح. لتفعيله يلزم تزويد المطور بما يلي:
-
-Online payment is explicitly disabled. Activation needs:
-
-1. اسم بوابة تقبل التاجر المسجل في العراق وتدعم تحصيل IQD، وتأكيد أهلية حساب المتجر. / A named gateway accepting the registered Iraqi merchant and IQD, with confirmed account eligibility.
-2. حساب تاجر مقبول، ورقم التاجر، ومفاتيح sandbox، ووثائق API والإصدارات المعتمدة. / Approved merchant account, merchant ID, sandbox credentials, and API/version documentation.
-3. طريقة توقيع webhook والسر الخاص به، وعنوان HTTPS دائم للاستقبال والعودة، وحالات الفشل والاسترجاع. / Webhook signing method/secret, stable HTTPS webhook and return URLs, and documented failure/refund states.
-4. تنفيذ موصل خادمي يبدأ الدفع ويطابق المبلغ والعملة والطلب مع استجابة التحقق، مع سجل معاملات فريد يمنع تكرار المعالجة. / A server adapter that initiates payment, verifies amount/currency/order against the gateway, and uses unique transaction records to prevent replay.
-5. فحص توقيع webhook وإعادة الإرسال والفشل والنجاح في sandbox، ثم إضافة أسرار الإنتاج بعد الموافقة. / Sandbox verification of authentic webhooks, retries, failures, and success; production secrets only after approval.
-
-لا تجمع بيانات البطاقات في التطبيق. استخدم صفحة الدفع المستضافة المعتمدة من البوابة عند تنفيذ الربط. لا تعتبر صفحة العودة وحدها إثباتاً للدفع؛ قرار حالة الدفع يكون على الخادم.
-
-Keep card details outside this application; use the gateway's approved hosted checkout when integrating it. A return URL alone does not prove payment; the server decides payment status from verified gateway information.
+Export remote D1 before migrations with `npx wrangler d1 export school-supplies-store --remote --output <protected-backup.sql>`. Use D1 Time Travel/bookmarks or import the export to a separate recovery database, verify it, and switch the binding during a maintenance window. Preserve the auth encryption secret, revoke restored sessions, and reconcile orders/inventory from the same point in time. See the README for local recovery and lost-factor recovery.
